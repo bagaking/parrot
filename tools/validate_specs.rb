@@ -17,6 +17,7 @@ required_files = [
   "README.md",
   "specs/001-ai-learning-assistant/spec.md",
   "specs/001-ai-learning-assistant/plan.md",
+  "specs/001-ai-learning-assistant/research.md",
   "specs/001-ai-learning-assistant/data-model.md",
   "specs/001-ai-learning-assistant/quickstart.md",
   "specs/001-ai-learning-assistant/contracts/openapi.yaml"

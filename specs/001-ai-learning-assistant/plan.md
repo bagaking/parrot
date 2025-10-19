@@ -1,6 +1,6 @@
 # Implementation Plan: AI 学习助理首个里程碑
 
-**Branch**: `001-ai-learning-assistant` | **Date**: 2025-10-19 | **Spec**: `/Users/bytedance/proj/priv/bagaking/parrot/specs/001-ai-learning-assistant/spec.md`
+**Branch**: `001-ai-learning-assistant` | **Date**: 2025-10-19 | **Spec**: `specs/001-ai-learning-assistant/spec.md`
 **Input**: Feature specification from `/specs/001-ai-learning-assistant/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. Document the workflow in `.specify/templates/commands/plan.md` once the command template is created.
