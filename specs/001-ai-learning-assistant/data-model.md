@@ -163,7 +163,7 @@ enum GenerationStatus {
 }
 
 enum FallbackSource {
-  DOUDAO
+  DOUBAO
   OPENAI
   TEMPLATE
 }
@@ -218,7 +218,7 @@ model ModelProviderConfig {
 }
 
 enum ProviderType {
-  DOUDAO
+  DOUBAO
   OPENAI_COMPAT
   LOCAL_TEMPLATE
 }
