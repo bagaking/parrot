@@ -1,0 +1,860 @@
+openapi: 3.1.0
+info:
+  title: Parrot AI 学习助理 API (Next.js)
+  version: 0.1.0
+  description: |
+    Next.js App Router 提供的本地 API，服务于多通道点子捕捉、知识图谱整理、复习与导出功能。
+servers:
+  - url: http://localhost:3000/api
+    description: Next.js 本地开发服务器
+security:
+  - WorkspaceAuth: []
+
+paths:
+  /auth/token:
+    post:
+      summary: 使用 workspace secret 换取 JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspaceId:
+                  type: string
+                  format: ulid
+                workspaceSecret:
+                  type: string
+              required: [workspaceId, workspaceSecret]
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  expiresIn:
+                    type: integer
+        '401':
+          description: Invalid secret
+
+  /ideas:
+    get:
+      summary: 列出捕捉记录
+      parameters:
+        - in: query
+          name: channel
+          schema:
+            $ref: '#/components/schemas/CaptureChannel'
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/IdeaStatus'
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 返回分页结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaList'
+    post:
+      summary: 创建新的点子
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdeaCreateRequest'
+      responses:
+        '201':
+          description: Idea created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaDetail'
+
+  /ideas/{ideaId}:
+    get:
+      summary: 获取点子详情
+      parameters:
+        - $ref: '#/components/parameters/IdeaId'
+      responses:
+        '200':
+          description: Idea detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaDetail'
+    patch:
+      summary: 更新点子状态/标签
+      parameters:
+        - $ref: '#/components/parameters/IdeaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdeaUpdateRequest'
+      responses:
+        '200':
+          description: Updated idea
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaDetail'
+
+  /ideas/{ideaId}/transcribe:
+    post:
+      summary: 上传音频并请求转写
+      parameters:
+        - $ref: '#/components/parameters/IdeaId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                languageHint:
+                  type: string
+      responses:
+        '202':
+          description: 转写任务已受理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptJob'
+
+  /ideas/{ideaId}/feedback:
+    post:
+      summary: 重新生成 AI 反馈
+      parameters:
+        - $ref: '#/components/parameters/IdeaId'
+      responses:
+        '202':
+          description: Feedback regeneration queued
+
+  /graph/nodes:
+    get:
+      summary: 列出知识节点
+      responses:
+        '200':
+          description: Hierarchy list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeList'
+    post:
+      summary: 创建节点
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeCreateRequest'
+      responses:
+        '201':
+          description: Node created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeNode'
+
+  /graph/nodes/{nodeId}:
+    patch:
+      summary: 更新节点元数据
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeUpdateRequest'
+      responses:
+        '200':
+          description: Updated node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeNode'
+    delete:
+      summary: 归档节点
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - in: query
+          name: cascade
+          schema:
+            type: boolean
+      responses:
+        '204':
+          description: Node archived
+
+  /graph/edges:
+    post:
+      summary: 创建点子-节点关联
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdeaNodeEdgeCreate'
+      responses:
+        '201':
+          description: Edge created
+    delete:
+      summary: 移除关联
+      parameters:
+        - in: query
+          name: ideaId
+          schema:
+            type: string
+            format: ulid
+        - in: query
+          name: nodeId
+          schema:
+            type: string
+            format: ulid
+      responses:
+        '204':
+          description: Edge removed
+
+  /graph/references:
+    post:
+      summary: 创建点子引用
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdeaReferenceCreate'
+      responses:
+        '201':
+          description: Reference created
+    get:
+      summary: 查询引用列表
+      parameters:
+        - in: query
+          name: ideaId
+          schema:
+            type: string
+            format: ulid
+      responses:
+        '200':
+          description: Reference list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaReferenceList'
+
+  /reviews/cards:
+    post:
+      summary: 根据点子生成复习卡片
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardGenerationRequest'
+      responses:
+        '202':
+          description: 生成任务已入队
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardGenerationJob'
+    get:
+      summary: 列出复习卡片
+      responses:
+        '200':
+          description: Card list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCardList'
+
+  /reviews/cards/{cardId}:
+    patch:
+      summary: 手动编辑卡片
+      parameters:
+        - $ref: '#/components/parameters/CardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCardUpdate'
+      responses:
+        '200':
+          description: Updated card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCardDetail'
+
+  /reviews/cards/{cardId}/schedule:
+    post:
+      summary: 提交复习结果并更新间隔
+      parameters:
+        - $ref: '#/components/parameters/CardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewOutcomeRequest'
+      responses:
+        '200':
+          description: Updated schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewSchedule'
+
+  /exports:
+    post:
+      summary: 请求导出
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '202':
+          description: Export job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportJob'
+    get:
+      summary: 查询导出任务
+      responses:
+        '200':
+          description: Job list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExportJob'
+
+  /exports/{jobId}/download:
+    get:
+      summary: 下载导出文件
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+            format: ulid
+      responses:
+        '200':
+          description: File stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /admin/providers:
+    get:
+      summary: 列出模型提供方
+      responses:
+        '200':
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderList'
+    post:
+      summary: 新增或更新 provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderUpsert'
+      responses:
+        '200':
+          description: Upserted provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelProvider'
+
+  /admin/providers/{providerId}/toggle:
+    post:
+      summary: 启用/停用 provider
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+      responses:
+        '200':
+          description: Updated provider state
+
+  /admin/logs:
+    get:
+      summary: 流式返回活动日志
+      responses:
+        '200':
+          description: 日志 SSE 流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /admin/workspaces/{workspaceId}:
+    delete:
+      summary: 删除工作区并清理数据
+      parameters:
+        - in: path
+          name: workspaceId
+          required: true
+          schema:
+            type: string
+            format: ulid
+        - in: query
+          name: backup
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '202':
+          description: 删除已排队处理
+
+components:
+  securitySchemes:
+    WorkspaceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdeaId:
+      name: ideaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: ulid
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: ulid
+    CardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: ulid
+    ProviderId:
+      name: providerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: ulid
+
+  schemas:
+    CaptureChannel:
+      type: string
+      enum: [text, clipboard, audio]
+    IdeaStatus:
+      type: string
+      enum: [draft, classified, linked, archived]
+    IdeaList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdeaSummary'
+        nextCursor:
+          type: string
+          nullable: true
+    IdeaSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: ulid
+        content:
+          type: string
+        channel:
+          $ref: '#/components/schemas/CaptureChannel'
+        status:
+          $ref: '#/components/schemas/IdeaStatus'
+        capturedAt:
+          type: string
+          format: date-time
+        aiTags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaggedScore'
+    TaggedScore:
+      type: object
+      properties:
+        label:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+    IdeaCreateRequest:
+      type: object
+      properties:
+        channel:
+          $ref: '#/components/schemas/CaptureChannel'
+        content:
+          type: string
+        rawPayload:
+          type: object
+        language:
+          type: string
+      required: [channel, content]
+    IdeaDetail:
+      allOf:
+        - $ref: '#/components/schemas/IdeaSummary'
+        - type: object
+          properties:
+            rawPayload:
+              type: object
+            transcriptionConfidence:
+              type: number
+              minimum: 0
+              maximum: 1
+            latestFeedback:
+              $ref: '#/components/schemas/IdeaFeedback'
+    IdeaFeedback:
+      type: object
+      properties:
+        id:
+          type: string
+          format: ulid
+        summary:
+          type: string
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaggedScore'
+        providerId:
+          type: string
+          format: ulid
+        createdAt:
+          type: string
+          format: date-time
+    IdeaUpdateRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/IdeaStatus'
+        aiTags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaggedScore'
+        nodeIds:
+          type: array
+          items:
+            type: string
+            format: ulid
+    TranscriptJob:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+    NodeList:
+      type: array
+      items:
+        $ref: '#/components/schemas/KnowledgeNode'
+    KnowledgeNode:
+      type: object
+      properties:
+        id:
+          type: string
+          format: ulid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        parentId:
+          type: string
+          format: ulid
+          nullable: true
+        nodeType:
+          type: string
+          enum: [topic, subtopic, reference]
+        createdAt:
+          type: string
+          format: date-time
+    NodeCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        parentId:
+          type: string
+          format: ulid
+          nullable: true
+        nodeType:
+          type: string
+          enum: [topic, subtopic, reference]
+      required: [title, nodeType]
+    NodeUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        parentId:
+          type: string
+          format: ulid
+          nullable: true
+    IdeaNodeEdgeCreate:
+      type: object
+      properties:
+        ideaId:
+          type: string
+          format: ulid
+        nodeId:
+          type: string
+          format: ulid
+        relationship:
+          type: string
+          enum: [belongs_to, supports, contrasts]
+      required: [ideaId, nodeId]
+    IdeaReferenceCreate:
+      type: object
+      properties:
+        sourceIdeaId:
+          type: string
+          format: ulid
+        targetIdeaId:
+          type: string
+          format: ulid
+        relationship:
+          type: string
+          enum: [follow_up, citation, prerequisite]
+      required: [sourceIdeaId, targetIdeaId, relationship]
+    IdeaReferenceList:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+            format: ulid
+          sourceIdeaId:
+            type: string
+            format: ulid
+          targetIdeaId:
+            type: string
+            format: ulid
+          relationship:
+            type: string
+          createdAt:
+            type: string
+            format: date-time
+    CardGenerationRequest:
+      type: object
+      properties:
+        ideaIds:
+          type: array
+          items:
+            type: string
+            format: ulid
+        strategy:
+          type: string
+          enum: [auto, consolidate, cloze]
+      required: [ideaIds]
+    CardGenerationJob:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, fallback, failed]
+        createdAt:
+          type: string
+          format: date-time
+    ReviewCardList:
+      type: array
+      items:
+        $ref: '#/components/schemas/ReviewCardDetail'
+    ReviewCardDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: ulid
+        front:
+          type: string
+        back:
+          type: string
+        hints:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        generationStatus:
+          type: string
+          enum: [pending, ready, fallback, rejected]
+        fallbackSource:
+          type: string
+          enum: [doubao, openai, template]
+        schedule:
+          $ref: '#/components/schemas/ReviewSchedule'
+    ReviewSchedule:
+      type: object
+      properties:
+        intervalMinutes:
+          type: integer
+        dueAt:
+          type: string
+          format: date-time
+        easeFactor:
+          type: number
+        streak:
+          type: integer
+        lastReviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ReviewCardUpdate:
+      type: object
+      properties:
+        front:
+          type: string
+        back:
+          type: string
+        hints:
+          type: array
+          items:
+            type: string
+        generationStatus:
+          type: string
+          enum: [ready, fallback, rejected]
+    ReviewOutcomeRequest:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [again, hard, good, easy]
+        notes:
+          type: string
+      required: [outcome]
+    ExportRequest:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [anki_apkg, json]
+        includeLogs:
+          type: boolean
+      required: [format]
+    ExportJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: ulid
+        jobType:
+          type: string
+        status:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        resultPath:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+    ProviderList:
+      type: array
+      items:
+        $ref: '#/components/schemas/ModelProvider'
+    ModelProvider:
+      type: object
+      properties:
+        id:
+          type: string
+          format: ulid
+        name:
+          type: string
+        providerType:
+          type: string
+          enum: [doubao, openai-compatible, local-template]
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+        stats:
+          $ref: '#/components/schemas/ProviderStats'
+    ProviderStats:
+      type: object
+      properties:
+        successCount:
+          type: integer
+        failureCount:
+          type: integer
+        avgLatencyMs:
+          type: number
+    ProviderUpsert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: ulid
+          nullable: true
+        name:
+          type: string
+        providerType:
+          type: string
+        priority:
+          type: integer
+        baseUrl:
+          type: string
+        apiKey:
+          type: string
+          description: Transient secret, stored via keytar
+        timeoutSeconds:
+          type: integer
+        enabled:
+          type: boolean
+      required: [name, providerType, priority]
