@@ -49,6 +49,44 @@ def resolve_local_ref(document, ref)
   end
 end
 
+def path_template_names(path)
+  path.scan(/\{([^{}]+)\}/).flatten.uniq
+end
+
+def parameter_name(parameter, document)
+  resolved = if parameter.is_a?(Hash) && parameter.key?("$ref")
+               resolve_local_ref(document, parameter["$ref"])
+             else
+               parameter
+             end
+
+  return nil unless resolved.is_a?(Hash) && resolved["in"] == "path"
+
+  resolved["name"]
+end
+
+def missing_path_parameters(openapi)
+  openapi.fetch("paths").each_with_object([]) do |(path, path_item), missing|
+    next unless path_item.is_a?(Hash)
+
+    template_names = path_template_names(path)
+    next if template_names.empty?
+
+    path_parameters = Array(path_item["parameters"])
+
+    path_item.each do |method, operation|
+      next if method == "parameters" || !operation.is_a?(Hash)
+
+      declared_names = (path_parameters + Array(operation["parameters"])).map do |parameter|
+        parameter_name(parameter, openapi)
+      end.compact
+      missing_names = template_names - declared_names
+
+      missing.concat(missing_names.map { |name| "#{method.upcase} #{path} missing path parameter #{name}" })
+    end
+  end
+end
+
 def assert_local_ref(document, ref, expected)
   resolved = resolve_local_ref(document, ref)
   return if resolved == expected
@@ -81,7 +119,61 @@ def self_check_local_ref_resolver
   assert_missing_local_ref(document, pointer.call("", "components", "schemas", "-1"))
 end
 
+def self_check_path_parameter_validation
+  ideas_path = ["", "ideas", "{ideaId}"].join("/")
+  nested_path = ["", "cards", "{cardId}", "reviews", "{reviewId}"].join("/")
+  exports_path = ["", "exports", "{jobId}"].join("/")
+
+  document = {
+    "paths" => {
+      ideas_path => {
+        "get" => {
+          "parameters" => [
+            { "$ref" => ["#", "components", "parameters", "IdeaId"].join("/") }
+          ]
+        }
+      },
+      nested_path => {
+        "parameters" => [
+          {
+            "name" => "cardId",
+            "in" => "path"
+          }
+        ],
+        "post" => {
+          "parameters" => [
+            {
+              "name" => "reviewId",
+              "in" => "path"
+            }
+          ]
+        }
+      },
+      exports_path => {
+        "get" => {
+          "parameters" => []
+        }
+      }
+    },
+    "components" => {
+      "parameters" => {
+        "IdeaId" => {
+          "name" => "ideaId",
+          "in" => "path"
+        }
+      }
+    }
+  }
+
+  missing = missing_path_parameters(document)
+  expected = ["GET #{exports_path} missing path parameter jobId"]
+  return if missing == expected
+
+  fail_with("internal path parameter validation self-check failed")
+end
+
 self_check_local_ref_resolver
+self_check_path_parameter_validation
 
 required_files = [
   "README.md",
@@ -123,6 +215,11 @@ end
 missing_refs = refs.select { |ref| resolve_local_ref(openapi, ref).nil? }
 unless missing_refs.empty?
   fail_with("OpenAPI local $ref values do not resolve: #{missing_refs.join(", ")}")
+end
+
+path_parameter_gaps = missing_path_parameters(openapi)
+unless path_parameter_gaps.empty?
+  fail_with("OpenAPI path template parameters are not declared: #{path_parameter_gaps.join(", ")}")
 end
 
 readme = File.read(repo_path("README.md"))

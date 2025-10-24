@@ -61,7 +61,8 @@ Current validation is limited to reviewing the specification artifacts:
 - `specs/001-ai-learning-assistant/quickstart.md`
 
 Run `make validate` to check that the required spec files exist, the OpenAPI
-YAML parses, and the repository still presents itself as a spec-only workspace.
+YAML parses, local `$ref` values resolve, path template parameters are declared,
+and the repository still presents itself as a spec-only workspace.
 
 No automated product test suite is present in the repository yet. The intended
 future validation surface includes unit tests, API tests, component tests, and
