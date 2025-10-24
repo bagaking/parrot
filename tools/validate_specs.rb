@@ -30,11 +30,58 @@ def resolve_local_ref(document, ref)
 
   ref.delete_prefix("#/").split("/").reduce(document) do |cursor, segment|
     key = segment.gsub("~1", "/").gsub("~0", "~")
-    return nil unless cursor.is_a?(Hash) && cursor.key?(key)
 
-    cursor[key]
+    case cursor
+    when Hash
+      return nil unless cursor.key?(key)
+
+      cursor[key]
+    when Array
+      return nil unless key.match?(/\A(?:0|[1-9]\d*)\z/)
+
+      index = key.to_i
+      return nil if index >= cursor.length
+
+      cursor[index]
+    else
+      return nil
+    end
   end
 end
+
+def assert_local_ref(document, ref, expected)
+  resolved = resolve_local_ref(document, ref)
+  return if resolved == expected
+
+  fail_with("internal local $ref resolver self-check failed for #{ref}")
+end
+
+def assert_missing_local_ref(document, ref)
+  return if resolve_local_ref(document, ref).nil?
+
+  fail_with("internal local $ref resolver self-check unexpectedly resolved #{ref}")
+end
+
+def self_check_local_ref_resolver
+  document = {
+    "components" => {
+      "schemas" => [
+        {
+          "literal/name" => {
+            "tilde~key" => "resolved"
+          }
+        }
+      ]
+    }
+  }
+
+  pointer = ->(*segments) { "##{segments.join("/")}" }
+  assert_local_ref(document, pointer.call("", "components", "schemas", "0", "literal~1name", "tilde~0key"), "resolved")
+  assert_missing_local_ref(document, pointer.call("", "components", "schemas", "1"))
+  assert_missing_local_ref(document, pointer.call("", "components", "schemas", "-1"))
+end
+
+self_check_local_ref_resolver
 
 required_files = [
   "README.md",
